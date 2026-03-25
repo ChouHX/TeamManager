@@ -38,9 +38,9 @@ async def redeem_page(
         logger.info("用户访问兑换页面，剩余席位: %s", remaining_spots)
 
         return templates.TemplateResponse(
+            request,
             "user/redeem.html",
             {
-                "request": request,
                 "remaining_spots": remaining_spots,
                 "credit_config": credit_config,
                 "title": "兑换入口",

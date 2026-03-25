@@ -183,9 +183,9 @@ app.include_router(api.router)
 @app.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     return templates.TemplateResponse(
+        request,
         "auth/login.html",
         {
-            "request": request,
             "user": None,
             "title": "Admin Login",
             "message": "Enter the administrator password to continue.",

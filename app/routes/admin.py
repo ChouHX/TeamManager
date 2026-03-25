@@ -134,9 +134,9 @@ async def admin_dashboard(
         }
 
         return templates.TemplateResponse(
+            request,
             "admin/index.html",
             {
-                "request": request,
                 "user": current_user,
                 "active_page": "dashboard",
                 "title": "管理后台",
@@ -765,9 +765,9 @@ async def codes_list_page(
                 code["used_at"] = dt.strftime("%Y-%m-%d %H:%M")
 
         return templates.TemplateResponse(
+            request,
             "admin/index.html",
             {
-                "request": request,
                 "user": current_user,
                 "active_page": "codes",
                 "title": "兑换码管理",
@@ -1169,9 +1169,9 @@ async def records_page(
                 pass
 
         return templates.TemplateResponse(
+            request,
             "admin/index.html",
             {
-                "request": request,
                 "user": current_user,
                 "active_page": "records",
                 "title": "兑换记录",
@@ -1270,9 +1270,9 @@ async def settings_page(
         log_level = await settings_service.get_log_level(db)
 
         return templates.TemplateResponse(
+            request,
             "admin/index.html",
             {
-                "request": request,
                 "user": current_user,
                 "active_page": "settings",
                 "title": "系统设置",
