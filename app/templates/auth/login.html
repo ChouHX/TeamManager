@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title or "管理员登录" }}</title>
+  <link rel="icon" href="/static/img/favicon.png" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style type="text/tailwindcss">
+    @theme {
+      --font-sans: "IBM Plex Sans", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-mono: "JetBrains Mono", "Consolas", monospace;
+      --color-shell: #eef2f6;
+      --color-line: #d6dce5;
+      --color-ink: #0f172a;
+      --color-muted: #5b677a;
+      --color-accent: #124e66;
+      --shadow-panel: 0 10px 28px rgba(15, 23, 42, 0.06);
+    }
+  </style>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="min-h-screen bg-shell font-sans text-ink antialiased">
+  <main class="mx-auto flex min-h-screen max-w-6xl items-center justify-center px-3 py-6">
+    <section class="w-full max-w-[380px] rounded-[8px] border border-line bg-white p-5 shadow-panel">
+      <div class="text-[10px] font-semibold uppercase tracking-[0.26em] text-accent">管理入口</div>
+      <h1 class="mt-2 text-[22px] font-semibold tracking-[-0.04em]">后台管理登录</h1>
+      <p class="mt-1 text-[12px] leading-5 text-muted">{{ message or "请输入管理员密码后继续。" }}</p>
+
+      <form id="loginForm" class="mt-5 space-y-3">
+        <label class="field-shell">
+          <span class="field-label">密码</span>
+          <input id="password" name="password" type="password" required autocomplete="current-password" class="field-input" placeholder="请输入管理员密码">
+        </label>
+        <div id="errorMessage" class="hidden rounded-[6px] border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-700"></div>
+        <button type="submit" class="btn-solid w-full">登录</button>
+      </form>
+
+      <div class="mt-5 border-t border-line pt-3 text-[11px] text-slate-500">
+        <a href="/" class="text-accent hover:underline">返回兑换页面</a>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

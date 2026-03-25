@@ -1,0 +1,655 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title or "管理后台" }}</title>
+  <link rel="icon" href="/static/img/favicon.png" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+  <style type="text/tailwindcss">
+    @theme {
+      --font-sans: "IBM Plex Sans", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-mono: "JetBrains Mono", "Consolas", monospace;
+      --color-shell: #eef2f6;
+      --color-line: #d6dce5;
+      --color-ink: #0f172a;
+      --color-muted: #5b677a;
+      --color-accent: #124e66;
+      --shadow-panel: 0 10px 28px rgba(15, 23, 42, 0.06);
+    }
+  </style>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="min-h-screen bg-shell font-sans text-ink antialiased">
+  {% set team_status_labels = {
+    "active": "正常",
+    "full": "已满员",
+    "expired": "已过期",
+    "error": "异常",
+    "banned": "已封禁"
+  } %}
+  {% set code_status_labels = {
+    "unused": "未使用",
+    "used": "已使用",
+    "expired": "已过期",
+    "warranty_active": "质保中"
+  } %}
+  <div class="mx-auto min-h-screen max-w-[1500px] px-3 py-3">
+    <main class="min-w-0">
+      <div class="rounded-[8px] border border-line bg-white shadow-panel">
+        <header class="border-b border-line px-4 py-3">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <h1 class="mt-1 text-[24px] tracking-[-0.04em]">{{ title or "管理后台" }}</h1>
+              <p class="mt-1 text-[12px] text-muted">{{ message or "统一管理 Team、兑换码、使用记录与系统设置。" }}</p>
+            </div>
+            <details class="top-menu">
+              <summary class="menu-icon-button" aria-label="打开菜单">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+              </summary>
+              <div class="menu-popover">
+                <a href="/admin" class="dropdown-link">概览</a>
+                <a href="/admin/codes" class="dropdown-link">兑换码</a>
+                <a href="/admin/records" class="dropdown-link">记录</a>
+                <a href="/admin/settings" class="dropdown-link">设置</a>
+                <a href="/" class="dropdown-link">兑换页</a>
+                <button type="button" id="logoutButton" class="dropdown-link dropdown-link-danger">退出登录</button>
+              </div>
+            </details>
+          </div>
+        </header>
+
+        <div class="space-y-3 p-3">
+          {% if stats %}
+          <section class="grid grid-cols-2 gap-2 md:grid-cols-5">
+            {% for key, value in stats.items() %}
+            <article class="rounded-[6px] border border-line bg-slate-50 px-3 py-3">
+              <div class="text-[10px] uppercase tracking-[0.18em] text-slate-500">{{ key }}</div>
+              <div class="mt-1 text-[24px] tracking-[-0.04em] text-slate-950">{{ value }}</div>
+            </article>
+            {% endfor %}
+          </section>
+          {% endif %}
+
+          {% if active_page == "dashboard" %}
+          <section class="section-card">
+            <form method="get" action="/admin" class="grid gap-2 rounded-[6px] border border-line bg-slate-50 p-3 md:grid-cols-4">
+              <label class="field-shell">
+                <span class="field-label">搜索</span>
+                <input class="field-input" type="text" name="search" value="{{ search or '' }}" placeholder="邮箱 / Account ID / Team">
+              </label>
+              <label class="field-shell">
+                <span class="field-label">状态</span>
+                <select class="field-input" name="status">
+                  <option value="">全部</option>
+                  {% for item in ["active", "full", "expired", "error", "banned"] %}
+                  <option value="{{ item }}" {% if status_filter == item %}selected{% endif %}>{{ team_status_labels.get(item, item) }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <label class="field-shell">
+                <span class="field-label">每页数量</span>
+                <select class="field-input" name="per_page">
+                  {% for item in [20, 50, 100] %}
+                  <option value="{{ item }}" {% if pagination.per_page == item %}selected{% endif %}>{{ item }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <div class="flex items-end gap-2">
+                <button class="btn-solid" type="submit">应用</button>
+                <a href="/admin" class="btn-muted">重置</a>
+                <button type="button" class="btn-solid" data-open-dialog="teamImportDialog">导入 Team</button>
+              </div>
+            </form>
+          </section>
+
+          <section class="section-card">
+            <div class="section-head">
+              <div>
+                <h2 class="section-title">Team 列表</h2>
+                <p class="section-copy">查看、刷新、邀请、编辑和删除 Team 账号。</p>
+              </div>
+            </div>
+            <div class="table-shell">
+              <div class="overflow-x-auto">
+                <table class="admin-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>邮箱</th>
+                      <th>Account ID</th>
+                      <th>Team</th>
+                      <th>成员数</th>
+                      <th>套餐</th>
+                      <th>到期时间</th>
+                      <th>状态</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for team in teams %}
+                    <tr>
+                      <td class="font-mono text-[11px] text-slate-500">{{ team.id }}</td>
+                      <td>
+                        <div class="font-medium text-slate-900">{{ team.email }}</div>
+                        <div class="mt-0.5 text-[11px] text-slate-500">{{ team.account_role or "-" }}</div>
+                      </td>
+                      <td class="font-mono text-[11px] text-slate-500">{{ team.account_id }}</td>
+                      <td>{{ team.team_name or "-" }}</td>
+                      <td>{{ team.current_members }}/{{ team.max_members }}</td>
+                      <td>{{ team.subscription_plan or "-" }}</td>
+                      <td>{{ team.expires_at or "-" }}</td>
+                      <td>
+                        <div class="flex flex-wrap gap-1.5">
+                          <span class="badge-status">{{ team_status_labels.get(team.status, team.status) }}</span>
+                          {% if team.device_code_auth_enabled %}<span class="status-chip">设备代码验证</span>{% endif %}
+                        </div>
+                      </td>
+                      <td>
+                        <div class="hidden md:flex flex-wrap gap-1.5">
+                          <button type="button" class="btn-table btn-icon" title="成员管理" aria-label="成员管理" data-action="team-members" data-team-id="{{ team.id }}" data-team-email="{{ team.email }}">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 19v-1a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v1M10 10a4 4 0 1 0 0-8 4 4 0 0 0 0 8M20 19v-1a4 4 0 0 0-3-3.87M13 4.13a4 4 0 0 1 0 7.75" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                          </button>
+                          <button type="button" class="btn-table btn-icon" title="编辑 Team" aria-label="编辑 Team" data-action="team-edit" data-team-id="{{ team.id }}">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                          </button>
+                          <button type="button" class="btn-table btn-icon" title="刷新 Team" aria-label="刷新 Team" data-action="team-refresh" data-team-id="{{ team.id }}">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 2v6h-6M3 22v-6h6M20.49 9A9 9 0 0 0 5 5.64L3 8M3.51 15A9 9 0 0 0 19 18.36L21 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                          </button>
+                          <button type="button" class="btn-table btn-icon" title="一键开启设备代码验证" aria-label="一键开启设备代码验证" data-action="team-device-auth" data-team-id="{{ team.id }}">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10ZM9 12l2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                          </button>
+                          <button type="button" class="btn-table btn-table-danger btn-icon" title="删除 Team" aria-label="删除 Team" data-action="team-delete" data-team-id="{{ team.id }}">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6m5 4v6m4-6v6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                          </button>
+                        </div>
+                        <details class="row-menu md:hidden">
+                          <summary class="row-menu-button" aria-label="展开操作">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                              <circle cx="12" cy="5" r="1.8" fill="currentColor"/>
+                              <circle cx="12" cy="12" r="1.8" fill="currentColor"/>
+                              <circle cx="12" cy="19" r="1.8" fill="currentColor"/>
+                            </svg>
+                          </summary>
+                          <div class="row-menu-popover">
+                            <button type="button" class="dropdown-link" data-action="team-members" data-team-id="{{ team.id }}" data-team-email="{{ team.email }}">成员</button>
+                            <button type="button" class="dropdown-link" data-action="team-edit" data-team-id="{{ team.id }}">编辑</button>
+                            <button type="button" class="dropdown-link" data-action="team-refresh" data-team-id="{{ team.id }}">刷新</button>
+                            <button type="button" class="dropdown-link" data-action="team-device-auth" data-team-id="{{ team.id }}">一键开启设备代码验证</button>
+                            <button type="button" class="dropdown-link dropdown-link-danger" data-action="team-delete" data-team-id="{{ team.id }}">删除</button>
+                          </div>
+                        </details>
+                      </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="9" class="px-3 py-6 text-center text-slate-500">暂无 Team 数据。</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+          {% endif %}
+
+          {% if active_page == "codes" %}
+          <section class="section-card">
+            <div class="section-head">
+              <div>
+                <h2 class="section-title">兑换码管理</h2>
+                <p class="section-copy">生成、筛选、导出和删除兑换码。</p>
+              </div>
+              <div class="flex gap-2">
+                <button type="button" class="btn-solid" data-open-dialog="codeGenerateDialog">生成兑换码</button>
+                <a href="/admin/codes/export" class="btn-muted" title="Ignore current filters and export all codes">Export All Excel</a>
+              </div>
+            </div>
+            <form method="get" action="/admin/codes" class="grid gap-2 rounded-[6px] border border-line bg-slate-50 p-3 md:grid-cols-4">
+              <label class="field-shell md:col-span-2">
+                <span class="field-label">搜索</span>
+                <input class="field-input" type="text" name="search" value="{{ search or '' }}" placeholder="兑换码 / 邮箱">
+              </label>
+              <label class="field-shell">
+                <span class="field-label">状态</span>
+                <select class="field-input" name="status">
+                  <option value="">全部</option>
+                  {% for item in ["unused", "used", "expired", "warranty_active"] %}
+                  <option value="{{ item }}" {% if status_filter == item %}selected{% endif %}>{{ code_status_labels.get(item, item) }}</option>
+                  {% endfor %}
+                </select>
+              </label>
+              <div class="flex items-end gap-2">
+                <button class="btn-solid" type="submit">筛选</button>
+                <a href="/admin/codes" class="btn-muted">重置</a>
+              </div>
+            </form>
+          </section>
+
+          <section class="section-card">
+            <div class="table-shell">
+              <div class="overflow-x-auto">
+                <table class="admin-table">
+                  <thead>
+                    <tr>
+                      <th>兑换码</th>
+                      <th>状态</th>
+                      <th>创建时间</th>
+                      <th>过期时间</th>
+                      <th>使用邮箱</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for item in codes %}
+                    <tr>
+                      <td class="font-mono text-[11px] text-slate-700">{{ item.code }}</td>
+                      <td><span class="badge-status">{{ code_status_labels.get(item.status, item.status) }}</span></td>
+                      <td>{{ item.created_at or "-" }}</td>
+                      <td>{{ item.expires_at or "-" }}</td>
+                      <td>{{ item.used_by_email or "-" }}</td>
+                      <td>
+                        <div class="hidden md:flex gap-1.5">
+                          <button type="button" class="btn-table btn-table-danger btn-icon" title="删除兑换码" aria-label="删除兑换码" data-action="code-delete" data-code="{{ item.code }}">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6m5 4v6m4-6v6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                          </button>
+                        </div>
+                        <details class="row-menu md:hidden">
+                          <summary class="row-menu-button" aria-label="展开操作">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                              <circle cx="12" cy="5" r="1.8" fill="currentColor"/>
+                              <circle cx="12" cy="12" r="1.8" fill="currentColor"/>
+                              <circle cx="12" cy="19" r="1.8" fill="currentColor"/>
+                            </svg>
+                          </summary>
+                          <div class="row-menu-popover">
+                            <button type="button" class="dropdown-link dropdown-link-danger" data-action="code-delete" data-code="{{ item.code }}">删除</button>
+                          </div>
+                        </details>
+                      </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="px-3 py-6 text-center text-slate-500">暂无兑换码。</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+          {% endif %}
+
+          {% if active_page == "records" %}
+          <section class="section-card">
+            <div class="section-head">
+              <div>
+                <h2 class="section-title">使用记录</h2>
+                <p class="section-copy">按邮箱、兑换码、Team 和日期范围筛选。</p>
+              </div>
+            </div>
+            <form method="get" action="/admin/records" class="grid gap-2 rounded-[6px] border border-line bg-slate-50 p-3 md:grid-cols-6">
+              <label class="field-shell">
+                <span class="field-label">邮箱</span>
+                <input class="field-input" type="text" name="email" value="{{ filters.email or '' }}">
+              </label>
+              <label class="field-shell">
+                <span class="field-label">兑换码</span>
+                <input class="field-input" type="text" name="code" value="{{ filters.code or '' }}">
+              </label>
+              <label class="field-shell">
+                <span class="field-label">Team ID</span>
+                <input class="field-input" type="text" name="team_id" value="{{ filters.team_id or '' }}">
+              </label>
+              <label class="field-shell">
+                <span class="field-label">开始日期</span>
+                <input class="field-input" type="date" name="start_date" value="{{ filters.start_date or '' }}">
+              </label>
+              <label class="field-shell">
+                <span class="field-label">结束日期</span>
+                <input class="field-input" type="date" name="end_date" value="{{ filters.end_date or '' }}">
+              </label>
+              <div class="flex items-end gap-2">
+                <button class="btn-solid" type="submit">应用</button>
+                <a href="/admin/records" class="btn-muted">重置</a>
+              </div>
+            </form>
+          </section>
+
+          <section class="section-card">
+            <div class="table-shell">
+              <div class="overflow-x-auto">
+                <table class="admin-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>邮箱</th>
+                      <th>兑换码</th>
+                      <th>Team</th>
+                      <th>时间</th>
+                      <th>操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for item in records %}
+                    <tr>
+                      <td class="font-mono text-[11px] text-slate-500">{{ item.id }}</td>
+                      <td>{{ item.email }}</td>
+                      <td class="font-mono text-[11px]">{{ item.code }}</td>
+                      <td>{{ item.team_name or item.team_id }}</td>
+                      <td>{{ item.redeemed_at }}</td>
+                      <td>
+                        <div class="hidden md:flex gap-1.5">
+                          <button type="button" class="btn-table btn-table-danger btn-icon" title="撤回记录" aria-label="撤回记录" data-action="record-withdraw" data-record-id="{{ item.id }}">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7v6h6M21 17v-6h-6M20 8a8 8 0 0 0-14-2L3 9M4 16a8 8 0 0 0 14 2l3-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                          </button>
+                        </div>
+                        <details class="row-menu md:hidden">
+                          <summary class="row-menu-button" aria-label="展开操作">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                              <circle cx="12" cy="5" r="1.8" fill="currentColor"/>
+                              <circle cx="12" cy="12" r="1.8" fill="currentColor"/>
+                              <circle cx="12" cy="19" r="1.8" fill="currentColor"/>
+                            </svg>
+                          </summary>
+                          <div class="row-menu-popover">
+                            <button type="button" class="dropdown-link dropdown-link-danger" data-action="record-withdraw" data-record-id="{{ item.id }}">撤回</button>
+                          </div>
+                        </details>
+                      </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="px-3 py-6 text-center text-slate-500">暂无记录。</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+          {% endif %}
+
+          {% if active_page == "settings" %}
+          <section class="grid gap-3 xl:grid-cols-2">
+            <form id="proxySettingsForm" class="section-card">
+              <div class="section-head">
+                <div>
+                  <h2 class="section-title">代理设置</h2>
+                  <p class="section-copy">配置外部请求使用的代理地址。</p>
+                </div>
+              </div>
+              <div class="grid gap-2">
+                <label class="field-shell field-shell-check">
+                  <input type="checkbox" name="enabled" {% if settings and settings.proxy_enabled %}checked{% endif %}>
+                  <span>启用代理</span>
+                </label>
+                <label class="field-shell">
+                  <span class="field-label">代理地址</span>
+                  <input class="field-input" type="text" name="proxy" value="{{ settings.proxy if settings else '' }}" placeholder="http://user:pass@host:port">
+                </label>
+                <div><button class="btn-solid" type="submit">保存</button></div>
+              </div>
+            </form>
+
+            <form id="logSettingsForm" class="section-card">
+              <div class="section-head">
+                <div>
+                  <h2 class="section-title">日志级别</h2>
+                  <p class="section-copy">调整运行时日志输出级别。</p>
+                </div>
+              </div>
+              <div class="grid gap-2">
+                <label class="field-shell">
+                  <span class="field-label">级别</span>
+                  <select class="field-input" name="level">
+                    {% for item in ["DEBUG", "INFO", "WARNING", "ERROR"] %}
+                    <option value="{{ item }}" {% if settings and settings.log_level == item %}selected{% endif %}>{{ item }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <div><button class="btn-solid" type="submit">保存</button></div>
+              </div>
+            </form>
+
+
+            <form id="teamBanPollingSettingsForm" class="section-card">
+              <div class="section-head">
+                <div>
+                  <h2 class="section-title">Team Status Polling</h2>
+                  <p class="section-copy">Background polling checks whether Team accounts are banned or invalid. Default interval: 30 minutes.</p>
+                </div>
+              </div>
+              <div class="grid gap-2">
+                <label class="field-shell">
+                  <span class="field-label">Interval (minutes)</span>
+                  <input
+                    class="field-input"
+                    type="number"
+                    min="1"
+                    max="1440"
+                    step="1"
+                    name="interval_minutes"
+                    value="{{ settings.team_ban_poll_interval_minutes if settings else 30 }}"
+                  >
+                </label>
+                <div class="text-[12px] text-slate-500">Changes take effect on the next polling cycle.</div>
+                <div><button class="btn-solid" type="submit">Save</button></div>
+              </div>
+            </form>
+
+            <form id="webhookSettingsForm" class="section-card xl:col-span-2">
+              <div class="section-head">
+                <div>
+                  <h2 class="section-title">Webhook 与 API</h2>
+                  <p class="section-copy">管理库存预警通知和 API 鉴权信息。</p>
+                </div>
+              </div>
+              <div class="grid gap-2 md:grid-cols-3">
+                <label class="field-shell md:col-span-2">
+                  <span class="field-label">Webhook 地址</span>
+                  <input class="field-input" type="text" name="webhook_url" value="{{ settings.webhook_url if settings else '' }}" placeholder="https://example.com/webhook">
+                </label>
+                <label class="field-shell">
+                  <span class="field-label">低库存阈值</span>
+                  <input class="field-input" type="number" min="0" name="low_stock_threshold" value="{{ settings.low_stock_threshold if settings else 10 }}">
+                </label>
+                <label class="field-shell md:col-span-3">
+                  <span class="field-label">API Key</span>
+                  <input class="field-input font-mono" type="text" name="api_key" value="{{ settings.api_key if settings else '' }}" placeholder="api key">
+                </label>
+                <label class="field-shell field-shell-check">
+                  <input type="checkbox" name="linuxdo_credit_enabled" {% if settings and (settings.linuxdo_credit_enabled in [True, 'true', 'True', '1', 1]) %}checked{% endif %}>
+                  <span>启用 Linux.do 积分购席位</span>
+                </label>
+                <label class="field-shell">
+                  <span class="field-label">Linux.do Client ID</span>
+                  <input class="field-input font-mono" type="text" name="linuxdo_credit_pid" value="{{ settings.linuxdo_credit_pid if settings else '' }}" placeholder="pid">
+                </label>
+                <label class="field-shell md:col-span-2">
+                  <span class="field-label">Linux.do Client Secret</span>
+                  <input class="field-input font-mono" type="text" name="linuxdo_credit_key" value="{{ settings.linuxdo_credit_key if settings else '' }}" placeholder="key">
+                </label>
+                <label class="field-shell">
+                  <span class="field-label">Linux.do 固定积分</span>
+                  <input class="field-input" type="text" name="linuxdo_credit_price" value="{{ settings.linuxdo_credit_price if settings else '' }}" placeholder="10.00">
+                </label>
+                <label class="field-shell md:col-span-2">
+                  <span class="field-label">Linux.do 回调地址</span>
+                  <input class="field-input" type="text" value="{{ settings.linuxdo_credit_notify_url_display if settings else '' }}" readonly>
+                </label>
+                <label class="field-shell">
+                  <span class="field-label">Linux.do 返回地址</span>
+                  <input class="field-input" type="text" value="{{ settings.linuxdo_credit_callback_uri_display if settings else '' }}" readonly>
+                </label>
+                <div class="md:col-span-3 text-[12px] text-slate-500">
+                  回调地址和返回地址由后端根据当前站点自动生成，请复制到 Linux.do 平台应用配置中，无需在本系统内手动填写。
+                </div>
+                <label class="field-shell md:col-span-3">
+                  <span class="field-label">Linux.do 默认标题</span>
+                  <input class="field-input" type="text" name="linuxdo_credit_default_name" value="{{ settings.linuxdo_credit_default_name if settings else 'Linux.do Credit' }}" placeholder="Linux.do Credit">
+                </label>
+                <div class="md:col-span-3"><button class="btn-solid" type="submit">保存</button></div>
+              </div>
+            </form>
+          </section>
+          {% endif %}
+
+          {% if pagination %}
+          {% set current_page = pagination.current_page or 1 %}
+          {% set total_pages = pagination.total_pages or 1 %}
+          <section class="rounded-[6px] border border-line bg-slate-50 px-3 py-2.5">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 class="text-[13px] font-semibold text-slate-900">分页</h2>
+                <p class="text-[11px] text-muted">第 {{ current_page }} / {{ total_pages }} 页，共 {{ pagination.total or 0 }} 条</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-1.5">
+                <a href="{{ request.url.include_query_params(page=1) }}" class="page-btn {% if current_page <= 1 %}is-disabled{% endif %}">首页</a>
+                <a href="{{ request.url.include_query_params(page=(current_page - 1 if current_page > 1 else 1)) }}" class="page-btn {% if current_page <= 1 %}is-disabled{% endif %}">上一页</a>
+                {% for number in range(1, total_pages + 1) %}
+                  {% if number >= current_page - 2 and number <= current_page + 2 %}
+                  <a href="{{ request.url.include_query_params(page=number) }}" class="page-btn {% if number == current_page %}is-current{% endif %}">{{ number }}</a>
+                  {% endif %}
+                {% endfor %}
+                <a href="{{ request.url.include_query_params(page=(current_page + 1 if current_page < total_pages else total_pages)) }}" class="page-btn {% if current_page >= total_pages %}is-disabled{% endif %}">下一页</a>
+                <a href="{{ request.url.include_query_params(page=total_pages) }}" class="page-btn {% if current_page >= total_pages %}is-disabled{% endif %}">末页</a>
+              </div>
+            </div>
+          </section>
+          {% endif %}
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="toast" class="pointer-events-none fixed right-3 top-3 z-50 hidden min-w-[220px] rounded-[6px] border border-slate-200 bg-white px-3 py-2 text-[12px] text-slate-700 shadow-panel"></div>
+
+  <dialog id="membersDialog" class="dialog-shell">
+    <div class="dialog-head">
+      <div>
+        <div class="text-[13px] text-slate-900">成员与邀请</div>
+        <div id="membersModalMeta" class="mt-1 text-[11px] text-slate-500"></div>
+      </div>
+      <button type="button" class="btn-muted" data-close-members>关闭</button>
+    </div>
+    <div class="space-y-3 p-4">
+      <form id="memberInviteForm" class="flex gap-2">
+        <input type="email" name="email" required class="field-input" placeholder="member@example.com">
+        <button class="btn-solid shrink-0" type="submit">发送邀请</button>
+      </form>
+      <div class="table-shell">
+        <div class="max-h-[420px] overflow-auto">
+          <table class="admin-table">
+            <thead><tr><th>邮箱</th><th>名称</th><th>角色</th><th>状态</th><th>操作</th></tr></thead>
+            <tbody id="membersTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="teamEditDialog" class="dialog-shell">
+    <div class="dialog-head">
+      <div><div class="text-[13px] text-slate-900">编辑 Team</div><div class="mt-1 text-[11px] text-slate-500">更新 Team 基础信息与 Token 字段。</div></div>
+      <button type="button" class="btn-muted" data-close-edit>关闭</button>
+    </div>
+    <form id="teamEditForm" class="grid gap-2 p-4 md:grid-cols-2">
+      <label class="field-shell"><span class="field-label">邮箱</span><input class="field-input" type="email" name="email"></label>
+      <label class="field-shell"><span class="field-label">Account ID</span><input class="field-input font-mono" type="text" name="account_id"></label>
+      <label class="field-shell"><span class="field-label">Team 名称</span><input class="field-input" type="text" name="team_name"></label>
+      <label class="field-shell"><span class="field-label">订阅计划</span><input class="field-input" type="text" name="subscription_plan"></label>
+      <label class="field-shell"><span class="field-label">状态</span><input class="field-input" type="text" name="status"></label>
+      <label class="field-shell"><span class="field-label">Client ID</span><input class="field-input" type="text" name="client_id"></label>
+      <label class="field-shell md:col-span-2"><span class="field-label">Access Token</span><input class="field-input font-mono" type="text" name="access_token"></label>
+      <label class="field-shell md:col-span-2"><span class="field-label">Refresh Token</span><input class="field-input font-mono" type="text" name="refresh_token"></label>
+      <label class="field-shell md:col-span-2"><span class="field-label">Session Token</span><input class="field-input font-mono" type="text" name="session_token"></label>
+      <div class="md:col-span-2 flex justify-end gap-2 pt-1"><button type="button" class="btn-muted" data-close-edit>取消</button><button type="submit" class="btn-solid">保存修改</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="teamImportDialog" class="dialog-shell">
+    <div class="dialog-head">
+      <div><div class="text-[13px] text-slate-900">导入 Team</div><div class="mt-1 text-[11px] text-slate-500">支持单条导入和批量导入。</div></div>
+      <button type="button" class="btn-muted" data-close-dialog="teamImportDialog">关闭</button>
+    </div>
+    <div class="space-y-3 p-4">
+      <div class="tab-row"><button type="button" class="tab-btn is-active" data-tab-target="singleImportPanel">单个导入</button><button type="button" class="tab-btn" data-tab-target="batchImportPanel">批量导入</button></div>
+      <div id="singleImportPanel" class="tab-panel is-active">
+        <form id="teamImportForm" class="grid gap-2 md:grid-cols-2">
+          <input type="hidden" name="import_type" value="single">
+          <label class="field-shell"><span class="field-label">邮箱</span><input class="field-input" type="email" name="email" placeholder="owner@example.com"></label>
+          <label class="field-shell"><span class="field-label">Account ID</span><input class="field-input font-mono" type="text" name="account_id" placeholder="工作区 ID"></label>
+          <label class="field-shell md:col-span-2"><span class="field-label">Access Token</span><input class="field-input font-mono" type="text" name="access_token" placeholder="eyJ..."></label>
+          <label class="field-shell"><span class="field-label">Refresh Token</span><input class="field-input font-mono" type="text" name="refresh_token" placeholder="rt-..."></label>
+          <label class="field-shell"><span class="field-label">Session Token</span><input class="field-input font-mono" type="text" name="session_token" placeholder="会话 Token"></label>
+          <label class="field-shell md:col-span-2"><span class="field-label">Client ID</span><input class="field-input" type="text" name="client_id" placeholder="客户端 ID"></label>
+          <div class="md:col-span-2 flex justify-end"><button class="btn-solid" type="submit">开始导入</button></div>
+        </form>
+      </div>
+      <div id="batchImportPanel" class="tab-panel">
+        <form id="teamBatchImportForm" class="grid gap-2">
+          <input type="hidden" name="import_type" value="batch">
+          <label class="field-shell"><span class="field-label">批量内容</span><textarea class="field-textarea min-h-[180px] font-mono" name="content" placeholder="每行一条，可包含 email/account_id/access_token/refresh_token/session_token/client_id"></textarea></label>
+          <div class="flex justify-end"><button class="btn-solid" type="submit">执行批量导入</button></div>
+        </form>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="codeGenerateDialog" class="dialog-shell">
+    <div class="dialog-head">
+      <div><div class="text-[13px] text-slate-900">生成兑换码</div><div class="mt-1 text-[11px] text-slate-500">支持单个生成和批量生成。</div></div>
+      <button type="button" class="btn-muted" data-close-dialog="codeGenerateDialog">关闭</button>
+    </div>
+    <div class="space-y-3 p-4">
+      <div class="tab-row"><button type="button" class="tab-btn is-active" data-tab-target="singleCodePanel">单个生成</button><button type="button" class="tab-btn" data-tab-target="batchCodePanel">批量生成</button></div>
+      <div id="singleCodePanel" class="tab-panel is-active">
+        <form id="codeGenerateForm" class="grid gap-2 md:grid-cols-2">
+          <input type="hidden" name="type" value="single">
+          <label class="field-shell"><span class="field-label">自定义兑换码</span><input class="field-input font-mono" type="text" name="code" placeholder="可选"></label>
+          <label class="field-shell"><span class="field-label">有效天数</span><input class="field-input" type="number" min="0" name="expires_days" value="0"></label>
+          <label class="field-shell field-shell-check"><input type="checkbox" name="has_warranty"><span>启用质保</span></label>
+          <label class="field-shell"><span class="field-label">质保天数</span><input class="field-input" type="number" min="1" name="warranty_days" value="30"></label>
+          <div class="md:col-span-2 flex justify-end"><button class="btn-solid" type="submit">生成</button></div>
+        </form>
+      </div>
+      <div id="batchCodePanel" class="tab-panel">
+        <form id="batchCodeGenerateForm" class="grid gap-2 md:grid-cols-2">
+          <input type="hidden" name="type" value="batch">
+          <label class="field-shell"><span class="field-label">数量</span><input class="field-input" type="number" min="1" max="1000" name="count" value="10"></label>
+          <label class="field-shell"><span class="field-label">有效天数</span><input class="field-input" type="number" min="0" name="expires_days" value="0"></label>
+          <label class="field-shell field-shell-check"><input type="checkbox" name="has_warranty"><span>启用质保</span></label>
+          <label class="field-shell"><span class="field-label">质保天数</span><input class="field-input" type="number" min="1" name="warranty_days" value="30"></label>
+          <div class="md:col-span-2 flex justify-end"><button class="btn-solid" type="submit">批量生成</button></div>
+        </form>
+      </div>
+    </div>
+  </dialog>
+
+
+  <dialog id="batchCodeResultDialog" class="dialog-shell">
+    <div class="dialog-head">
+      <div>
+        <div class="text-[13px] text-slate-900">Batch Code Result</div>
+        <div class="mt-1 text-[11px] text-slate-500">One code per line. Use the copy button to copy them all at once.</div>
+      </div>
+      <button type="button" class="btn-muted" data-close-dialog="batchCodeResultDialog">Close</button>
+    </div>
+    <div class="space-y-3 p-4">
+      <div class="rounded-[6px] border border-line bg-slate-50 px-3 py-2 text-[12px] text-slate-600">
+        Generated <span id="batchCodeResultCount" class="font-semibold text-slate-900">0</span> codes
+      </div>
+      <label class="field-shell">
+        <span class="field-label">Codes</span>
+        <textarea id="batchCodeResultTextarea" class="field-textarea min-h-[280px] font-mono" readonly></textarea>
+      </label>
+      <div class="flex justify-end gap-2">
+        <button type="button" class="btn-muted" data-copy-batch-codes>Copy All</button>
+        <button type="button" class="btn-solid" data-close-dialog="batchCodeResultDialog">Done</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
