@@ -112,6 +112,38 @@
         </header>
 
         <div class="space-y-3 p-3 md:p-4">
+          <section class="hero-strip">
+            <div class="hero-strip-copy">
+              <div class="hero-strip-kicker">Control Surface</div>
+              <div class="hero-strip-text">
+                {% if active_page == "dashboard" %}
+                当前查看 Team 总览与账号管理状态
+                {% elif active_page == "codes" %}
+                当前查看兑换码库存、导出与批量生成结果
+                {% elif active_page == "records" %}
+                当前查看兑换记录与筛选统计
+                {% elif active_page == "settings" %}
+                当前查看系统设置与后台轮询配置
+                {% else %}
+                当前查看管理面板
+                {% endif %}
+              </div>
+            </div>
+            <div class="hero-strip-badges">
+              <span class="hero-badge hero-badge-live">
+                <span class="hero-badge-dot"></span>
+                在线
+              </span>
+              {% if pagination %}
+              <span class="hero-badge">共 {{ pagination.total or 0 }} 条</span>
+              {% endif %}
+              {% if stats and active_page == "dashboard" %}
+              <span class="hero-badge">Team {{ stats.total_teams or 0 }}</span>
+              <span class="hero-badge">兑换码 {{ stats.total_codes or 0 }}</span>
+              {% endif %}
+            </div>
+          </section>
+
           {% if stats %}
           <section class="grid grid-cols-2 gap-2 md:grid-cols-5">
             {% for key, value in stats.items() %}
@@ -125,7 +157,7 @@
 
           {% if active_page == "dashboard" %}
           <section class="section-card">
-            <form method="get" action="/admin" class="grid gap-2 rounded-[6px] border border-line bg-slate-50 p-3 md:grid-cols-4">
+            <form method="get" action="/admin" class="toolbar-shell grid gap-2 md:grid-cols-4">
               <label class="field-shell">
                 <span class="field-label">搜索</span>
                 <input class="field-input" type="text" name="search" value="{{ search or '' }}" placeholder="邮箱 / Account ID / Team">
@@ -255,7 +287,7 @@
                 <a href="/admin/codes/export" class="btn-muted" title="忽略当前筛选条件，导出全部兑换码">导出全部 Excel</a>
               </div>
             </div>
-            <form method="get" action="/admin/codes" class="grid gap-2 rounded-[6px] border border-line bg-slate-50 p-3 md:grid-cols-4">
+            <form method="get" action="/admin/codes" class="toolbar-shell grid gap-2 md:grid-cols-4">
               <label class="field-shell md:col-span-2">
                 <span class="field-label">搜索</span>
                 <input class="field-input" type="text" name="search" value="{{ search or '' }}" placeholder="兑换码 / 邮箱">
@@ -336,7 +368,7 @@
                 <p class="section-copy">按邮箱、兑换码、Team 和日期范围筛选。</p>
               </div>
             </div>
-            <form method="get" action="/admin/records" class="grid gap-2 rounded-[6px] border border-line bg-slate-50 p-3 md:grid-cols-6">
+            <form method="get" action="/admin/records" class="toolbar-shell grid gap-2 md:grid-cols-6">
               <label class="field-shell">
                 <span class="field-label">邮箱</span>
                 <input class="field-input" type="text" name="email" value="{{ filters.email or '' }}">
