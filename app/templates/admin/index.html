@@ -7,18 +7,48 @@
   <link rel="icon" href="/static/img/favicon.png" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   <style type="text/tailwindcss">
     @theme {
-      --font-sans: "IBM Plex Sans", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      --font-sans: "Inter", "IBM Plex Sans", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
       --font-mono: "JetBrains Mono", "Consolas", monospace;
-      --color-shell: #eef2f6;
-      --color-line: #d6dce5;
+      --color-shell: #030508;
+      --color-line: rgba(255, 255, 255, 0.10);
       --color-ink: #0f172a;
       --color-muted: #5b677a;
-      --color-accent: #124e66;
-      --shadow-panel: 0 10px 28px rgba(15, 23, 42, 0.06);
+      --color-accent: #0071e3;
+      --shadow-panel: 0 28px 120px rgba(2, 8, 23, 0.45);
+    }
+    body {
+      background-color: #030508;
+      min-height: 100vh;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    .glow-orb-blue {
+      background: radial-gradient(circle 50vw at 50% 50%, rgba(37, 99, 235, 0.24) 0%, rgba(37, 99, 235, 0) 70%);
+    }
+
+    .glow-orb-cyan {
+      background: radial-gradient(circle 50vw at 50% 50%, rgba(34, 211, 238, 0.16) 0%, rgba(34, 211, 238, 0) 70%);
+    }
+
+    @keyframes blob {
+      0% { transform: translate3d(0, 0, 0) scale(1); }
+      33% { transform: translate3d(30px, -50px, 0) scale(1.08); }
+      66% { transform: translate3d(-20px, 18px, 0) scale(0.94); }
+      100% { transform: translate3d(0, 0, 0) scale(1); }
+    }
+
+    .animate-blob {
+      animation: blob 10s infinite alternate cubic-bezier(0.4, 0, 0.2, 1);
+      will-change: transform;
+    }
+
+    .animation-delay-2000 {
+      animation-delay: 2s;
     }
   </style>
   <link rel="stylesheet" href="/static/css/style.css">
@@ -37,14 +67,24 @@
     "expired": "已过期",
     "warranty_active": "质保中"
   } %}
-  <div class="mx-auto min-h-screen max-w-[1500px] px-3 py-3">
+  <div class="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+    <div class="glow-orb-blue animate-blob absolute left-0 top-0 h-[78vw] w-[78vw] max-h-[880px] max-w-[880px] -translate-x-1/4 -translate-y-1/4 rounded-full transform-gpu"></div>
+    <div class="glow-orb-cyan animate-blob animation-delay-2000 absolute bottom-0 right-0 h-[92vw] w-[92vw] max-h-[1080px] max-w-[1080px] translate-x-1/4 translate-y-1/4 rounded-full transform-gpu"></div>
+  </div>
+  <div class="relative z-10 mx-auto flex min-h-screen w-full max-w-[1500px] flex-col justify-center px-3 py-4">
     <main class="min-w-0">
-      <div class="rounded-[8px] border border-line bg-white shadow-panel">
-        <header class="border-b border-line px-4 py-3">
+      <div class="rounded-[28px] border border-white/10 bg-white/96 shadow-panel backdrop-blur-xl">
+        <header class="border-b border-slate-100/90 px-4 py-4 md:px-6">
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div class="inline-flex items-center gap-2 rounded-full border border-sky-200/70 bg-sky-50/90 px-3 py-1.5 text-[11px] font-semibold tracking-[0.18em] text-sky-700 uppercase">
+              <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
+              Admin Console
+            </div>
+          </div>
           <div class="flex items-start justify-between gap-3">
             <div class="min-w-0">
-              <h1 class="mt-1 text-[24px] tracking-[-0.04em]">{{ title or "管理后台" }}</h1>
-              <p class="mt-1 text-[12px] text-muted">{{ message or "统一管理 Team、兑换码、使用记录与系统设置。" }}</p>
+              <h1 class="mt-1 text-[26px] font-semibold tracking-[-0.05em] text-slate-950">{{ title or "管理后台" }}</h1>
+              <p class="mt-1 max-w-[760px] text-[12px] text-slate-500">{{ message or "统一管理 Team、兑换码、使用记录与系统设置。" }}</p>
             </div>
             <details class="top-menu">
               <summary class="menu-icon-button" aria-label="打开菜单">
@@ -62,15 +102,22 @@
               </div>
             </details>
           </div>
+          <div class="mt-4 flex flex-wrap gap-2">
+            <a href="/admin" class="action-chip">概览</a>
+            <a href="/admin/codes" class="action-chip">兑换码</a>
+            <a href="/admin/records" class="action-chip">记录</a>
+            <a href="/admin/settings" class="action-chip">设置</a>
+            <a href="/" class="action-chip">兑换页</a>
+          </div>
         </header>
 
-        <div class="space-y-3 p-3">
+        <div class="space-y-3 p-3 md:p-4">
           {% if stats %}
           <section class="grid grid-cols-2 gap-2 md:grid-cols-5">
             {% for key, value in stats.items() %}
-            <article class="rounded-[6px] border border-line bg-slate-50 px-3 py-3">
-              <div class="text-[10px] uppercase tracking-[0.18em] text-slate-500">{{ key }}</div>
-              <div class="mt-1 text-[24px] tracking-[-0.04em] text-slate-950">{{ value }}</div>
+            <article class="stat-card">
+              <div class="stat-label">{{ key }}</div>
+              <div class="stat-value">{{ value }}</div>
             </article>
             {% endfor %}
           </section>
@@ -205,7 +252,7 @@
               </div>
               <div class="flex gap-2">
                 <button type="button" class="btn-solid" data-open-dialog="codeGenerateDialog">生成兑换码</button>
-                <a href="/admin/codes/export" class="btn-muted" title="Ignore current filters and export all codes">Export All Excel</a>
+                <a href="/admin/codes/export" class="btn-muted" title="忽略当前筛选条件，导出全部兑换码">导出全部 Excel</a>
               </div>
             </div>
             <form method="get" action="/admin/codes" class="grid gap-2 rounded-[6px] border border-line bg-slate-50 p-3 md:grid-cols-4">
