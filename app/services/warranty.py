@@ -374,15 +374,44 @@ class WarrantyService:
             result = await db_session.execute(stmt)
             all_records_for_code = result.scalars().all()
 
-            # 5. 查找当前用户使用该兑换码的记录 (用于后续逻辑判断)
-            records = [r for r in all_records_for_code if r.email == email]
-            
-            if not records:
-                # 之前没有该邮箱的记录，但上面已经检查过没有其他活跃 Team 了，所以允许“新开”或“接手”
+            normalized_email = email.strip().lower()
+            bound_email = (redemption_code.used_by_email or "").strip().lower()
+            historical_emails = {
+                (record.email or "").strip().lower()
+                for record in all_records_for_code
+                if record.email
+            }
+
+            # 质保码重复兑换必须绑定原兑换邮箱，防止其他人拿到兑换码后“接手上车”
+            if bound_email and bound_email != normalized_email:
                 return {
                     "success": True,
-                    "can_reuse": True,
-                    "reason": "可更名使用 (或首次使用)",
+                    "can_reuse": False,
+                    "reason": f"该质保兑换码仅限原兑换邮箱 {redemption_code.used_by_email} 重复使用",
+                    "error": None
+                }
+
+            if historical_emails and normalized_email not in historical_emails:
+                original_email = sorted(historical_emails)[0]
+                return {
+                    "success": True,
+                    "can_reuse": False,
+                    "reason": f"该质保兑换码仅限原兑换邮箱 {original_email} 重复使用",
+                    "error": None
+                }
+
+            # 5. 查找当前用户使用该兑换码的记录 (用于后续逻辑判断)
+            records = [
+                r for r in all_records_for_code
+                if (r.email or "").strip().lower() == normalized_email
+            ]
+            
+            if not records:
+                # 没有找到当前邮箱的历史记录时，不允许其他邮箱接手使用
+                return {
+                    "success": True,
+                    "can_reuse": False,
+                    "reason": "未找到当前邮箱的质保使用记录，不允许跨邮箱重复兑换",
                     "error": None
                 }
 

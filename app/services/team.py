@@ -2119,7 +2119,8 @@ class TeamService:
     async def delete_team(
         self,
         team_id: int,
-        db_session: AsyncSession
+        db_session: AsyncSession,
+        manual: bool = False
     ) -> Dict[str, Any]:
         """
         删除 Team
@@ -2132,6 +2133,14 @@ class TeamService:
             结果字典,包含 success, message, error
         """
         try:
+            if not manual:
+                logger.warning(f"阻止非手动删除 Team: {team_id}")
+                return {
+                    "success": False,
+                    "message": None,
+                    "error": "仅允许管理员手动删除 Team，异常监测和后台任务不会自动删除"
+                }
+
             # 1. 查询 Team
             stmt = select(Team).where(Team.id == team_id)
             result = await db_session.execute(stmt)

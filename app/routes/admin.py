@@ -183,7 +183,7 @@ async def delete_team(
     try:
         logger.info(f"管理员删除 Team: {team_id}")
 
-        result = await team_service.delete_team(team_id, db)
+        result = await team_service.delete_team(team_id, db, manual=True)
 
         if not result["success"]:
             return JSONResponse(
@@ -640,7 +640,7 @@ async def batch_delete_teams(
         
         for team_id in action_data.ids:
             try:
-                result = await team_service.delete_team(team_id, db)
+                result = await team_service.delete_team(team_id, db, manual=True)
                 if result.get("success"):
                     success_count += 1
                 else:

@@ -77,6 +77,23 @@ class RedeemFlowService:
                     "error": None
                 }
 
+            redemption_code = validate_result.get("redemption_code") or {}
+            redemption_status = redemption_code.get("status")
+            if email and redemption_status in ["used", "warranty_active"]:
+                warranty_check = await self.warranty_service.validate_warranty_reuse(
+                    db_session=db_session,
+                    code=code,
+                    email=email
+                )
+                if not warranty_check.get("can_reuse"):
+                    return {
+                        "success": True,
+                        "valid": False,
+                        "reason": warranty_check.get("reason") or "该质保兑换码当前不可重复使用",
+                        "teams": [],
+                        "error": None
+                    }
+
             # 2. 获取可用 Team 列表
             teams_result = await self.team_service.get_available_teams(db_session)
 
@@ -237,8 +254,8 @@ class RedeemFlowService:
                                 await db_session.rollback()
                                 return {"success": False, "error": "兑换码不存在"}
                             
-                            if rc.status not in ["unused", "warranty_active"]:
-                                if rc.status == "used":
+                            if rc.status != "unused":
+                                if rc.has_warranty and rc.status in ["used", "warranty_active"]:
                                     warranty_check = await self.warranty_service.validate_warranty_reuse(
                                         db_session, code, email
                                     )
