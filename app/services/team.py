@@ -179,6 +179,90 @@ class TeamService:
         if not db_session.in_transaction():
             await db_session.commit()
 
+    async def _sync_polled_success_status(
+        self,
+        team: Team,
+        account_result: Dict[str, Any],
+        db_session: AsyncSession,
+    ) -> None:
+        """后台轮询成功后，刷新 last_sync 并恢复可见状态。"""
+        current_account = None
+        accounts = account_result.get("accounts") or []
+
+        for acc in accounts:
+            if acc.get("account_id") == team.account_id:
+                current_account = acc
+                break
+
+        if not current_account:
+            for acc in accounts:
+                if acc.get("has_active_subscription"):
+                    current_account = acc
+                    break
+
+        expires_at = team.expires_at
+        if current_account and current_account.get("expires_at"):
+            try:
+                expires_at = datetime.fromisoformat(
+                    current_account["expires_at"].replace("+00:00", "")
+                )
+            except Exception as exc:
+                logger.warning(f"解析轮询 expires_at 失败: {exc}")
+
+        team.expires_at = expires_at
+        team.error_count = 0
+        team.last_sync = get_now()
+
+        if team.current_members >= team.max_members:
+            team.status = "full"
+        elif expires_at and expires_at < datetime.now():
+            team.status = "expired"
+        else:
+            team.status = "active"
+
+        if not db_session.in_transaction():
+            await db_session.commit()
+        else:
+            await db_session.flush()
+
+    async def _sync_polled_failure_status(
+        self,
+        result: Dict[str, Any],
+        team: Team,
+        db_session: AsyncSession,
+    ) -> None:
+        """后台轮询失败后，立即同步异常状态到前端可见。"""
+        error_code = result.get("error_code")
+        error_msg = str(result.get("error", "")).lower()
+
+        target_status = team.status
+        if error_code == "token_expired" or "token_expired" in error_msg or "token is expired" in error_msg:
+            target_status = "expired"
+        elif any(kw in error_msg for kw in ["maximum number of seats", "reached maximum number of seats", "no seats available"]):
+            target_status = "full"
+        elif team.status == "active":
+            target_status = "error"
+        elif team.status not in ["full", "expired", "error", "banned"]:
+            target_status = "error"
+
+        if target_status != team.status:
+            logger.warning(
+                "轮询检测到异常后同步 Team %s (%s) 状态: %s -> %s",
+                team.id,
+                team.email,
+                team.status,
+                target_status,
+            )
+            team.status = target_status
+
+        team.error_count = max((team.error_count or 0), 1)
+        team.last_sync = get_now()
+
+        if not db_session.in_transaction():
+            await db_session.commit()
+        else:
+            await db_session.flush()
+
     async def ensure_access_token(self, team: Team, db_session: AsyncSession, force_refresh: bool = False) -> Optional[str]:
         """
         确保 AT Token 有效,如果过期则尝试刷新
@@ -1178,6 +1262,11 @@ class TeamService:
         try:
             access_token = await self.ensure_access_token(team, db_session)
             if not access_token:
+                await self._sync_polled_failure_status(
+                    {"error_code": "token_expired", "error": "access token unavailable during polling"},
+                    team,
+                    db_session,
+                )
                 return {
                     "success": False,
                     "team_id": team.id,
@@ -1193,6 +1282,11 @@ class TeamService:
                     team.id,
                     team.email,
                     token_email,
+                )
+                await self._sync_polled_failure_status(
+                    {"error_code": None, "error": "token email mismatch during polling"},
+                    team,
+                    db_session,
                 )
                 return {
                     "success": False,
@@ -1210,6 +1304,7 @@ class TeamService:
 
             if not account_result["success"]:
                 await self._handle_api_error(account_result, team, db_session)
+                await self._sync_polled_failure_status(account_result, team, db_session)
                 return {
                     "success": False,
                     "team_id": team.id,
@@ -1218,6 +1313,7 @@ class TeamService:
                     "error": account_result.get("error") or "ban probe failed"
                 }
 
+            await self._sync_polled_success_status(team, account_result, db_session)
             return {
                 "success": True,
                 "team_id": team.id,
@@ -1228,6 +1324,11 @@ class TeamService:
 
         except Exception as e:
             logger.error(f"Team {team.id} ban probe failed: {e}")
+            await self._sync_polled_failure_status(
+                {"error_code": None, "error": str(e)},
+                team,
+                db_session,
+            )
             return {
                 "success": False,
                 "team_id": team.id,
