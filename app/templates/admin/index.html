@@ -242,13 +242,13 @@
                 <h2 class="section-title">兑换码管理</h2>
                 <p class="section-copy">生成、筛选、导出和删除兑换码。</p>
               </div>
-              <div class="flex gap-2">
+              <div class="section-head-actions section-head-actions-nowrap">
                 <button type="button" class="btn-solid" data-open-dialog="codeGenerateDialog">生成兑换码</button>
                 <a href="/admin/codes/export" class="btn-muted" title="忽略当前筛选条件，导出全部兑换码">导出全部 Excel</a>
               </div>
             </div>
-            <form method="get" action="/admin/codes" class="toolbar-shell grid gap-2 md:grid-cols-4">
-              <label class="field-shell md:col-span-2">
+            <form method="get" action="/admin/codes" class="toolbar-shell toolbar-shell-codes">
+              <label class="field-shell codes-search-field">
                 <span class="field-label">搜索</span>
                 <input class="field-input" type="text" name="search" value="{{ search or '' }}" placeholder="兑换码 / 邮箱">
               </label>
@@ -261,7 +261,7 @@
                   {% endfor %}
                 </select>
               </label>
-              <div class="flex items-end gap-2">
+              <div class="codes-filter-actions">
                 <button class="btn-solid" type="submit">筛选</button>
                 <a href="/admin/codes" class="btn-muted">重置</a>
               </div>
@@ -447,6 +447,31 @@
                   </select>
                 </label>
                 <div><button class="btn-solid" type="submit">保存</button></div>
+              </div>
+            </form>
+
+            <form id="passwordChangeForm" class="section-card">
+              <div class="section-head">
+                <div>
+                  <h2 class="section-title">管理员密码</h2>
+                  <p class="section-copy">修改后台登录密码，保存成功后会自动退出当前会话。</p>
+                </div>
+              </div>
+              <div class="grid gap-2">
+                <label class="field-shell">
+                  <span class="field-label">当前密码</span>
+                  <input class="field-input" type="password" name="old_password" autocomplete="current-password" required>
+                </label>
+                <label class="field-shell">
+                  <span class="field-label">新密码</span>
+                  <input class="field-input" type="password" name="new_password" autocomplete="new-password" minlength="6" required>
+                </label>
+                <label class="field-shell">
+                  <span class="field-label">确认新密码</span>
+                  <input class="field-input" type="password" name="confirm_new_password" autocomplete="new-password" minlength="6" required>
+                </label>
+                <div class="text-[12px] text-slate-500">新密码至少 6 位，提交成功后请使用新密码重新登录。</div>
+                <div><button class="btn-solid" type="submit">更新密码</button></div>
               </div>
             </form>
 

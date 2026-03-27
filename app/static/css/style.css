@@ -45,13 +45,17 @@ body {
 .content-stack {
   display: flex;
   min-height: 0;
+  flex: 1;
   flex-direction: column;
   gap: 10px;
   padding-top: 10px;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .content-stack-table {
   flex: 1;
+  overflow: hidden;
 }
 
 .section-compact {
@@ -279,6 +283,23 @@ input[type="checkbox"]:focus {
   margin-bottom: 12px;
 }
 
+.section-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.section-head-actions-nowrap {
+  min-width: 0;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.section-head-actions-nowrap > * {
+  flex-shrink: 0;
+}
+
 .section-title {
   margin: 0;
   font-size: 15px;
@@ -371,6 +392,25 @@ input[type="checkbox"]:focus {
     linear-gradient(180deg, rgba(248, 250, 252, 0.94), rgba(255, 255, 255, 0.90)),
     linear-gradient(135deg, rgba(0, 113, 227, 0.04), rgba(34, 211, 238, 0.05));
   padding: 12px;
+}
+
+.toolbar-shell-codes {
+  display: grid;
+  gap: 8px;
+  align-items: end;
+  grid-template-columns: minmax(0, 1.35fr) minmax(150px, 0.7fr) auto;
+}
+
+.codes-search-field {
+  min-width: 0;
+}
+
+.codes-filter-actions {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 .field-shell-check {
@@ -658,8 +698,50 @@ input[type="checkbox"]:focus {
 }
 
 @media (max-width: 1024px) {
+  body {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .admin-main {
+    height: auto;
+    min-height: calc(100vh - 24px);
+  }
+
+  .admin-page {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
+
+  .content-stack,
+  .content-stack-table {
+    flex: none;
+    overflow: visible;
+  }
+
+  .table-section,
+  .table-shell {
+    flex: none;
+  }
+
+  .table-shell {
+    min-height: 280px;
+  }
+
+  .table-shell > .overflow-x-auto {
+    height: auto;
+    max-height: none;
+  }
+
   .section-head {
     flex-direction: column;
+  }
+
+  .section-head-actions-nowrap {
+    max-width: 100%;
+    overflow-x: auto;
+    padding-bottom: 2px;
   }
 
   .hero-strip {
@@ -670,6 +752,10 @@ input[type="checkbox"]:focus {
 
   .hero-strip-badges {
     justify-content: flex-start;
+  }
+
+  .toolbar-shell-codes {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

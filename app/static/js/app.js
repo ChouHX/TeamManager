@@ -476,7 +476,7 @@ function mountRedeemFlow() {
 }
 
 function mountAdminConsole() {
-  const adminRoot = document.querySelector("[data-action], #teamImportForm, #teamBatchImportForm, #codeGenerateForm, #batchCodeGenerateForm, #proxySettingsForm, #logSettingsForm, #teamBanPollingSettingsForm, #webhookSettingsForm, #logoutButton");
+  const adminRoot = document.querySelector("[data-action], #teamImportForm, #teamBatchImportForm, #codeGenerateForm, #batchCodeGenerateForm, #proxySettingsForm, #logSettingsForm, #passwordChangeForm, #teamBanPollingSettingsForm, #webhookSettingsForm, #logoutButton");
   if (!adminRoot) return;
 
   const membersDialog = document.getElementById("membersDialog");
@@ -490,6 +490,7 @@ function mountAdminConsole() {
   const teamEditForm = document.getElementById("teamEditForm");
   const batchCodeResultCount = document.getElementById("batchCodeResultCount");
   const batchCodeResultTextarea = document.getElementById("batchCodeResultTextarea");
+  const passwordChangeForm = document.getElementById("passwordChangeForm");
   let activeTeamId = null;
   let refreshAfterBatchCodeResultClose = false;
 
@@ -884,6 +885,38 @@ function mountAdminConsole() {
     try {
       await postJSON("/admin/settings/log-level", formToJSON(event.currentTarget));
       showToast("日志级别已保存");
+    } catch (error) {
+      showToast(error.message, "error");
+    } finally {
+      resetLoading();
+    }
+  });
+
+  passwordChangeForm?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const resetLoading = withFormLoading(form, "更新中...");
+    const payload = formToJSON(form);
+    const confirmPassword = payload.confirm_new_password || "";
+    delete payload.confirm_new_password;
+
+    try {
+      if (!payload.old_password || !payload.new_password) {
+        throw new Error("请填写完整的密码信息");
+      }
+      if ((payload.new_password || "").length < 6) {
+        throw new Error("新密码至少需要 6 位");
+      }
+      if (payload.new_password !== confirmPassword) {
+        throw new Error("两次输入的新密码不一致");
+      }
+
+      await postJSON("/auth/change-password", payload);
+      showToast("密码修改成功，请重新登录");
+      form.reset();
+      window.setTimeout(() => {
+        window.location.href = "/login";
+      }, 800);
     } catch (error) {
       showToast(error.message, "error");
     } finally {

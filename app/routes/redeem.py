@@ -59,6 +59,7 @@ async def verify_code(
             request.code,
             db,
             email=request.email,
+            enforce_redeem_seat_limit=True,
         )
 
         if not result["success"]:
@@ -96,6 +97,7 @@ async def confirm_redeem(
             request.code,
             request.team_id,
             db,
+            enforce_redeem_seat_limit=True,
         )
 
         if not result["success"]:

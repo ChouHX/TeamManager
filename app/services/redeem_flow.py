@@ -26,6 +26,9 @@ _code_locks = defaultdict(asyncio.Lock)
 # 全局 Team 锁: 针对 Team 进行加锁，防止并发拉人导致的人数状态不同步
 _team_locks = defaultdict(asyncio.Lock)
 
+REDEEM_CODE_SEAT_LIMIT = 5
+REDEEM_CODE_SEAT_LIMIT_ERROR = f"该 Team 已达到兑换码兑换席位上限（{REDEEM_CODE_SEAT_LIMIT}）"
+
 
 class RedeemFlowService:
     """兑换流程场景服务类"""
@@ -38,11 +41,45 @@ class RedeemFlowService:
         self.team_service = TeamService()
         self.chatgpt_service = chatgpt_service
 
+    def _get_effective_team_capacity(
+        self,
+        max_members: Optional[int],
+        enforce_redeem_seat_limit: bool = False,
+    ) -> int:
+        capacity = int(max_members or 0)
+        if not enforce_redeem_seat_limit:
+            return capacity
+        return min(capacity, REDEEM_CODE_SEAT_LIMIT)
+
+    def _team_has_available_capacity(
+        self,
+        team_like: Dict[str, Any],
+        enforce_redeem_seat_limit: bool = False,
+    ) -> bool:
+        effective_capacity = self._get_effective_team_capacity(
+            team_like.get("max_members"),
+            enforce_redeem_seat_limit,
+        )
+        return int(team_like.get("current_members") or 0) < effective_capacity
+
+    def _normalize_team_for_redeem(
+        self,
+        team_like: Dict[str, Any],
+        enforce_redeem_seat_limit: bool = False,
+    ) -> Dict[str, Any]:
+        normalized_team = dict(team_like)
+        normalized_team["max_members"] = self._get_effective_team_capacity(
+            normalized_team.get("max_members"),
+            enforce_redeem_seat_limit,
+        )
+        return normalized_team
+
     async def verify_code_and_get_teams(
         self,
         code: str,
         db_session: AsyncSession,
-        email: Optional[str] = None
+        email: Optional[str] = None,
+        enforce_redeem_seat_limit: bool = False,
     ) -> Dict[str, Any]:
         """
         验证兑换码并返回可用 Team 列表
@@ -106,14 +143,18 @@ class RedeemFlowService:
                     "error": teams_result["error"]
                 }
 
-            filtered_teams = teams_result["teams"]
+            filtered_teams = [
+                self._normalize_team_for_redeem(team, enforce_redeem_seat_limit)
+                for team in teams_result["teams"]
+                if self._team_has_available_capacity(team, enforce_redeem_seat_limit)
+            ]
             if email:
                 normalized_email = email.lower()
-                filtered_teams = []
-                for team in teams_result["teams"]:
+                email_filtered_teams = []
+                for team in filtered_teams:
                     members_result = await self.team_service.get_team_members(team["id"], db_session)
                     if not members_result.get("success"):
-                        filtered_teams.append(team)
+                        email_filtered_teams.append(team)
                         continue
 
                     existing_emails = {
@@ -122,7 +163,8 @@ class RedeemFlowService:
                         if member.get("email")
                     }
                     if normalized_email not in existing_emails:
-                        filtered_teams.append(team)
+                        email_filtered_teams.append(team)
+                filtered_teams = email_filtered_teams
 
             logger.info(f"验证兑换码成功: {code}, 可用 Team 数量: {len(filtered_teams)}")
 
@@ -148,7 +190,8 @@ class RedeemFlowService:
     async def select_team_auto(
         self,
         db_session: AsyncSession,
-        exclude_team_ids: Optional[List[int]] = None
+        exclude_team_ids: Optional[List[int]] = None,
+        enforce_redeem_seat_limit: bool = False,
     ) -> Dict[str, Any]:
         """
         自动选择一个可用的 Team
@@ -167,12 +210,22 @@ class RedeemFlowService:
             stmt = stmt.order_by(Team.current_members.asc(), Team.created_at.desc())
             
             result = await db_session.execute(stmt)
-            team = result.scalars().first()
+            teams = result.scalars().all()
+            team = next(
+                (
+                    item for item in teams
+                    if item.current_members < self._get_effective_team_capacity(
+                        item.max_members,
+                        enforce_redeem_seat_limit,
+                    )
+                ),
+                None,
+            )
 
             if not team:
                 reason = "没有可用的 Team"
                 if exclude_team_ids:
-                    reason = "您已加入所有可用 Team"
+                    reason = "当前没有满足兑换条件的 Team"
                 return {
                     "success": False,
                     "team_id": None,
@@ -200,7 +253,8 @@ class RedeemFlowService:
         email: str,
         code: str,
         team_id: Optional[int],
-        db_session: AsyncSession
+        db_session: AsyncSession,
+        enforce_redeem_seat_limit: bool = False,
     ) -> Dict[str, Any]:
         """
         完整的兑换流程 (带事务和并发控制)
@@ -211,6 +265,7 @@ class RedeemFlowService:
         core_success = False
         success_result = None
         team_id_final = None
+        excluded_team_ids: List[int] = []
 
         # 针对 code 加锁，防止同一个码并发进入兑换
         async with _code_locks[code]:
@@ -221,7 +276,11 @@ class RedeemFlowService:
                     # 确定目标 Team (初选)
                     team_id_final = current_target_team_id
                     if not team_id_final:
-                        select_res = await self.select_team_auto(db_session)
+                        select_res = await self.select_team_auto(
+                            db_session,
+                            exclude_team_ids=excluded_team_ids,
+                            enforce_redeem_seat_limit=enforce_redeem_seat_limit,
+                        )
                         if not select_res["success"]:
                             return {"success": False, "error": select_res["error"]}
                         team_id_final = select_res["team_id"]
@@ -277,6 +336,15 @@ class RedeemFlowService:
                             if target_team.current_members >= target_team.max_members:
                                 target_team.status = "full"
                                 raise Exception("该 Team 已满, 请选择其他 Team 尝试")
+
+                            if (
+                                enforce_redeem_seat_limit
+                                and target_team.current_members >= self._get_effective_team_capacity(
+                                    target_team.max_members,
+                                    True,
+                                )
+                            ):
+                                raise Exception(f"{REDEEM_CODE_SEAT_LIMIT_ERROR}，请换一个 Team 再试")
 
                             # 提取必要信息后立即提交，释放 DB 锁以进行耗时的 API 调用
                             account_id_to_use = target_team.account_id
@@ -383,6 +451,20 @@ class RedeemFlowService:
                             await db_session.rollback()
                     except:
                         pass
+
+                    if REDEEM_CODE_SEAT_LIMIT_ERROR in last_error:
+                        if team_id:
+                            return {"success": False, "error": last_error}
+
+                        if team_id_final and team_id_final not in excluded_team_ids:
+                            excluded_team_ids.append(team_id_final)
+                        current_target_team_id = None
+
+                        if attempt < max_retries - 1:
+                            await asyncio.sleep(1.5 * (attempt + 1))
+                            continue
+
+                        return {"success": False, "error": last_error}
                     
                     # 判读是否中断重试
                     if any(kw in last_error for kw in ["不存在", "已使用", "已有正在使用", "质保已过期"]):
@@ -391,6 +473,8 @@ class RedeemFlowService:
                     # 判定是否需要永久标记为“满员”
                     if any(kw in last_error.lower() for kw in ["已满", "seats", "full"]):
                         try:
+                            if team_id_final and team_id_final not in excluded_team_ids:
+                                excluded_team_ids.append(team_id_final)
                             if not team_id:
                                 from sqlalchemy import update as sqlalchemy_update
                                 await db_session.execute(
